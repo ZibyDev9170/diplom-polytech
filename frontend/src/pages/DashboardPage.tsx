@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 
 import { HealthResponse, apiClient } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 
 export function DashboardPage() {
+  const { user } = useAuth();
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,11 +23,14 @@ export function DashboardPage() {
 
   return (
     <section className="page">
-      <p className="eyebrow">Review Management System</p>
-      <h1>Панель управления отзывами</h1>
       <p className="lead">
         Каркас готов для модулей авторизации, отзывов, аналитики и интеграций.
       </p>
+      {user ? (
+        <p className="muted">
+          Вы вошли как {user.full_name}, роль: {user.role.name}.
+        </p>
+      ) : null}
 
       <div className="status-panel">
         <h2>Связь с API</h2>

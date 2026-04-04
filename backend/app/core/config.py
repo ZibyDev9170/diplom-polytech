@@ -11,6 +11,11 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://reviews:reviews@localhost:5432/review_management"
     )
     cors_origins: list[str] = ["http://localhost:5173"]
+    jwt_secret_key: str = "dev-secret-change-before-production"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
+    max_failed_login_attempts: int = 5
+    login_block_minutes: int = 10
 
     model_config = SettingsConfigDict(
         env_file=".env",

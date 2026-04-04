@@ -103,6 +103,18 @@ docker compose exec backend alembic revision --autogenerate -m "add reviews"
 docker compose exec backend alembic upgrade head
 ```
 
+## Аутентификация
+
+Основные endpoint:
+
+- `POST /api/v1/auth/login` — вход по email и паролю, ответ содержит JWT
+- `GET /api/v1/auth/me` — текущий пользователь по Bearer-токену
+- `GET /api/v1/auth/admin-check` — пример endpoint, защищенного ролью `admin`
+
+Пароли хэшируются через bcrypt. После 5 неудачных попыток входа пользователь блокируется на 10 минут. Попытки входа для существующих пользователей записываются в `auth.login_attempts`.
+
+Пользователи не добавляются в seed-данных. Сейчас seeded только роли, статусы, источники отзывов и допустимые переходы статусов.
+
 ## Локальная разработка без Docker
 
 Backend:
