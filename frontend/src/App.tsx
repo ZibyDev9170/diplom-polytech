@@ -7,6 +7,7 @@ import { ForbiddenPage } from "./pages/ForbiddenPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { UsersPage } from "./pages/UsersPage";
 
 export function App() {
   return (
@@ -38,15 +39,7 @@ export function App() {
             />
           </Route>
           <Route element={<ProtectedRoute roles={["admin"]} />}>
-            <Route
-              path="users"
-              element={
-                <PlaceholderPage
-                  eyebrow="Пользователи"
-                  text="Здесь появятся пользователи, роли и активность входов."
-                />
-              }
-            />
+            <Route path="users" element={<UsersPage />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Route>

@@ -23,6 +23,7 @@ export function DashboardPage() {
 
   return (
     <section className="page">
+      <p className="eyebrow">Review Management System</p>
       <p className="lead">
         Каркас готов для модулей авторизации, отзывов, аналитики и интеграций.
       </p>

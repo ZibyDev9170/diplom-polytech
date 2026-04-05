@@ -6,6 +6,7 @@ type PlaceholderPageProps = {
 export function PlaceholderPage({ eyebrow, text }: PlaceholderPageProps) {
   return (
     <section className="page">
+      <p className="eyebrow">{eyebrow}</p>
       <p className="lead">{text}</p>
     </section>
   );

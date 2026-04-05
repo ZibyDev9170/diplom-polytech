@@ -22,11 +22,34 @@ export type CurrentUser = {
   is_active: boolean;
 };
 
+export type ManagedUser = CurrentUser & {
+  blocked_until: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type LoginResponse = {
   access_token: string;
   token_type: "bearer";
   expires_in: number;
   user: CurrentUser;
+};
+
+export type CreateUserPayload = {
+  full_name: string;
+  email: string;
+  password: string;
+  role_id: number;
+};
+
+export type UpdateUserPayload = {
+  full_name: string;
+  email: string;
+  role_id: number;
+};
+
+export type UpdateUserRolePayload = {
+  role_id: number;
 };
 
 export class ApiError extends Error {
@@ -88,4 +111,34 @@ export const apiClient = {
       body: JSON.stringify({ email, password }),
     }),
   getCurrentUser: (token: string) => request<CurrentUser>("/auth/me", { token }),
+  getRoles: (token: string) => request<Role[]>("/users/roles", { token }),
+  getUsers: (token: string) => request<ManagedUser[]>("/users", { token }),
+  createUser: (token: string, payload: CreateUserPayload) =>
+    request<ManagedUser>("/users", {
+      method: "POST",
+      token,
+      body: JSON.stringify(payload),
+    }),
+  updateUser: (token: string, userId: number, payload: UpdateUserPayload) =>
+    request<ManagedUser>(`/users/${userId}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(payload),
+    }),
+  updateUserRole: (token: string, userId: number, payload: UpdateUserRolePayload) =>
+    request<ManagedUser>(`/users/${userId}/role`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(payload),
+    }),
+  blockUser: (token: string, userId: number) =>
+    request<ManagedUser>(`/users/${userId}/block`, {
+      method: "PATCH",
+      token,
+    }),
+  unblockUser: (token: string, userId: number) =>
+    request<ManagedUser>(`/users/${userId}/unblock`, {
+      method: "PATCH",
+      token,
+    }),
 };
