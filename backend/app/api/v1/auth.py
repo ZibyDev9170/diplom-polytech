@@ -13,6 +13,7 @@ from app.core.security import create_access_token, verify_password
 from app.db.session import get_db_session
 from app.models.auth import LoginAttempt, Role, User
 from app.schemas.auth import LoginRequest, LoginResponse, RoleRead, UserRead
+from app.services.audit import add_login_audit_log
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -44,6 +45,15 @@ async def login(
 
     if not user.is_active:
         await log_login_attempt(session, user.id, False, client_ip)
+        add_login_audit_log(
+            session=session,
+            user_id=user.id,
+            email=user.email,
+            ip_address=client_ip,
+            is_success=False,
+            reason="inactive_user",
+            metadata={"role_code": role.code, "is_active": user.is_active},
+        )
         await session.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -53,6 +63,19 @@ async def login(
     now = datetime.now(timezone.utc)
     if user.blocked_until and to_aware_utc(user.blocked_until) > now:
         await log_login_attempt(session, user.id, False, client_ip)
+        add_login_audit_log(
+            session=session,
+            user_id=user.id,
+            email=user.email,
+            ip_address=client_ip,
+            is_success=False,
+            reason="blocked_until_active",
+            metadata={
+                "role_code": role.code,
+                "failed_login_attempts": user.failed_login_attempts,
+                "blocked_until": user.blocked_until,
+            },
+        )
         await session.commit()
         raise HTTPException(
             status_code=423,
@@ -67,6 +90,19 @@ async def login(
             user.blocked_until = now + timedelta(minutes=settings.login_block_minutes)
 
         await log_login_attempt(session, user.id, False, client_ip)
+        add_login_audit_log(
+            session=session,
+            user_id=user.id,
+            email=user.email,
+            ip_address=client_ip,
+            is_success=False,
+            reason="invalid_password",
+            metadata={
+                "role_code": role.code,
+                "failed_login_attempts": user.failed_login_attempts,
+                "blocked_until": user.blocked_until,
+            },
+        )
         await session.commit()
         raise invalid_credentials_exception()
 
@@ -75,6 +111,14 @@ async def login(
     user.updated_at = now
 
     await log_login_attempt(session, user.id, True, client_ip)
+    add_login_audit_log(
+        session=session,
+        user_id=user.id,
+        email=user.email,
+        ip_address=client_ip,
+        is_success=True,
+        metadata={"role_code": role.code},
+    )
     await session.commit()
 
     user_read = build_user_read(user, role)

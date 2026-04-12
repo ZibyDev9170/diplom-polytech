@@ -808,7 +808,7 @@ export function UsersPage() {
       {isModalOpen ? (
         <div className="modal-overlay" role="presentation" onMouseDown={closeModal}>
           <form
-            className="user-modal"
+            className="user-modal catalog-modal"
             onMouseDown={(event) => event.stopPropagation()}
             onSubmit={handleFormSubmit}
           >

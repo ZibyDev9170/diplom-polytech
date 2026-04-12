@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_roles
 from app.core.security import hash_password
 from app.db.session import get_db_session
-from app.models.audit import AuditLog
 from app.models.auth import Role, User
 from app.schemas.auth import RoleRead, UserRead
 from app.schemas.users import (
@@ -20,6 +19,7 @@ from app.schemas.users import (
     UserRoleUpdateRequest,
     UserUpdateRequest,
 )
+from app.services.audit import AuditEntity, AuditEvent, add_audit_log
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -74,8 +74,9 @@ async def create_user(
     add_audit_log(
         session=session,
         actor_id=current_user.id,
+        entity_type=AuditEntity.USER,
         entity_id=user.id,
-        action="create",
+        action=AuditEvent.USER_CREATE,
         new_values=serialize_user(user, role),
     )
     await session.commit()
@@ -106,8 +107,9 @@ async def update_user(
     add_audit_log(
         session=session,
         actor_id=current_user.id,
+        entity_type=AuditEntity.USER,
         entity_id=user.id,
-        action="update",
+        action=AuditEvent.USER_UPDATE,
         old_values=old_values,
         new_values=serialize_user(user, next_role),
     )
@@ -134,8 +136,9 @@ async def change_user_role(
     add_audit_log(
         session=session,
         actor_id=current_user.id,
+        entity_type=AuditEntity.USER,
         entity_id=user.id,
-        action="change_role",
+        action=AuditEvent.USER_CHANGE_ROLE,
         old_values=old_values,
         new_values=serialize_user(user, next_role),
     )
@@ -165,8 +168,9 @@ async def block_user(
     add_audit_log(
         session=session,
         actor_id=current_user.id,
+        entity_type=AuditEntity.USER,
         entity_id=user.id,
-        action="block",
+        action=AuditEvent.USER_BLOCK,
         old_values=old_values,
         new_values=serialize_user(user, role),
     )
@@ -192,8 +196,9 @@ async def unblock_user(
     add_audit_log(
         session=session,
         actor_id=current_user.id,
+        entity_type=AuditEntity.USER,
         entity_id=user.id,
-        action="unblock",
+        action=AuditEvent.USER_UNBLOCK,
         old_values=old_values,
         new_values=serialize_user(user, role),
     )
@@ -249,26 +254,6 @@ async def ensure_email_is_available(
             status_code=status.HTTP_409_CONFLICT,
             detail="User with this email already exists",
         )
-
-
-def add_audit_log(
-    session: AsyncSession,
-    actor_id: int,
-    entity_id: int,
-    action: str,
-    old_values: dict[str, Any] | None = None,
-    new_values: dict[str, Any] | None = None,
-) -> None:
-    session.add(
-        AuditLog(
-            user_id=actor_id,
-            entity_type="auth.users",
-            entity_id=entity_id,
-            action=action,
-            old_values_json=old_values,
-            new_values_json=new_values,
-        ),
-    )
 
 
 def build_role_read(role: Role) -> RoleRead:

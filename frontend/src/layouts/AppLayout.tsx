@@ -14,13 +14,6 @@ type NavigationItem = {
 
 const navigationItems: NavigationItem[] = [
   {
-    to: "/",
-    label: "Обзор",
-    roles: ["admin", "manager", "support", "analyst"],
-    icon: "/images/icons/review.svg",
-    collapsedIcon: "/images/icons/review.svg",
-  },
-  {
     to: "/reviews",
     label: "Отзывы",
     roles: ["admin", "manager", "support", "analyst"],
@@ -30,9 +23,16 @@ const navigationItems: NavigationItem[] = [
   {
     to: "/analytics",
     label: "Аналитика",
-    roles: ["admin", "manager", "analyst"],
+    roles: ["admin", "analyst"],
     icon: "/images/icons/bar-chart.svg",
     collapsedIcon: "/images/icons/bar-chart.svg",
+  },
+  {
+    to: "/catalog",
+    label: "Каталог",
+    roles: ["admin", "manager", "analyst"],
+    icon: "/images/icons/catalog.svg",
+    collapsedIcon: "/images/icons/catalog.svg",
   },
   {
     to: "/users",
@@ -116,13 +116,15 @@ export function AppLayout() {
     .filter(Boolean)
     .join(" ");
   const currentSection =
-    availableNavigationItems.find((item) => {
-      if (item.to === "/") {
-        return location.pathname === "/";
-      }
+    location.pathname.startsWith("/reviews/")
+      ? "Карточка отзыва"
+      : availableNavigationItems.find((item) => {
+          if (item.to === "/") {
+            return location.pathname === "/";
+          }
 
-      return location.pathname.startsWith(item.to);
-    })?.label || "Раздел";
+          return location.pathname.startsWith(item.to);
+        })?.label || "Раздел";
 
   return (
     <div className={appShellClassName}>
