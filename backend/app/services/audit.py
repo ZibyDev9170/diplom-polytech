@@ -18,6 +18,7 @@ class AuditEntity(StrEnum):
     STATUS_TRANSITION = "catalog.allowed_status_transitions"
     REVIEW = "reviews.reviews"
     REVIEW_RESPONSE = "reviews.review_responses"
+    IMPORT_BATCH = "integration.import_batches"
     REPORT_EXPORT = "analytics.report_exports"
 
 
@@ -45,6 +46,7 @@ class AuditEvent(StrEnum):
     REVIEW_ASSIGN = "review_assign"
     REVIEW_UNASSIGN = "review_unassign"
     REVIEW_SAVE_RESPONSE = "review_save_response"
+    REVIEW_IMPORT = "review_import"
     REPORT_EXPORT = "report_export"
 
 
@@ -72,6 +74,7 @@ AUDIT_EVENT_DESCRIPTIONS: dict[AuditEvent, str] = {
     AuditEvent.REVIEW_ASSIGN: "Назначение ответственного за отзыв",
     AuditEvent.REVIEW_UNASSIGN: "Снятие ответственного с отзыва",
     AuditEvent.REVIEW_SAVE_RESPONSE: "Сохранение ответа на отзыв",
+    AuditEvent.REVIEW_IMPORT: "Импорт отзывов из внешнего источника",
     AuditEvent.REPORT_EXPORT: "Экспорт отчета",
 }
 

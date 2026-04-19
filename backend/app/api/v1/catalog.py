@@ -37,7 +37,7 @@ router = APIRouter(prefix="/catalog", tags=["catalog"])
 def require_catalog_access(
     current_user: UserRead = Depends(get_current_user),
 ) -> UserRead:
-    if current_user.role.code == "support":
+    if current_user.role.code not in {"admin", "manager"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient role permissions",

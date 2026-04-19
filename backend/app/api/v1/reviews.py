@@ -8,7 +8,7 @@ from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.api.deps import get_current_user
+from app.api.deps import require_roles
 from app.db.session import get_db_session
 from app.models.auth import Role, User
 from app.models.catalog import (
@@ -46,14 +46,18 @@ from app.services.audit import AuditEntity, AuditEvent, add_audit_log
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 
+review_access = require_roles("admin", "manager", "support")
+
 
 @router.get("/reference-data", response_model=ReviewReferenceDataRead)
 async def list_review_reference_data(
-    _: UserRead = Depends(get_current_user),
+    _: UserRead = Depends(review_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> ReviewReferenceDataRead:
     products_result = await session.execute(
-        select(Product).order_by(Product.name, Product.id),
+        select(Product)
+        .where(Product.is_active.is_(True))
+        .order_by(Product.name, Product.id),
     )
     statuses_result = await session.execute(
         select(ReviewStatus).order_by(ReviewStatus.sort_order, ReviewStatus.id),
@@ -86,7 +90,7 @@ async def list_reviews(
     q: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    _: UserRead = Depends(get_current_user),
+    _: UserRead = Depends(review_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> ReviewListResponse:
     ensure_date_range_is_valid(date_from, date_to)
@@ -143,7 +147,7 @@ async def list_reviews(
 @router.post("", response_model=ReviewDetailRead, status_code=status.HTTP_201_CREATED)
 async def create_review(
     payload: ReviewCreateRequest,
-    current_user: UserRead = Depends(get_current_user),
+    current_user: UserRead = Depends(review_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> ReviewDetailRead:
     product = await get_product_or_404(session, payload.product_id)
@@ -225,7 +229,7 @@ async def create_review(
 @router.get("/{review_id}", response_model=ReviewDetailRead)
 async def get_review(
     review_id: int,
-    _: UserRead = Depends(get_current_user),
+    _: UserRead = Depends(review_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> ReviewDetailRead:
     return await get_review_detail_or_404(session, review_id)
@@ -235,7 +239,7 @@ async def get_review(
 async def update_review(
     review_id: int,
     payload: ReviewUpdateRequest,
-    current_user: UserRead = Depends(get_current_user),
+    current_user: UserRead = Depends(review_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> ReviewDetailRead:
     if not payload.model_fields_set:
@@ -310,7 +314,7 @@ async def update_review(
 async def change_review_status(
     review_id: int,
     payload: ReviewStatusChangeRequest,
-    current_user: UserRead = Depends(get_current_user),
+    current_user: UserRead = Depends(review_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> ReviewDetailRead:
     review = await get_review_entity_or_404(session, review_id, for_update=True)
@@ -369,7 +373,7 @@ async def change_review_status(
 async def assign_review_user(
     review_id: int,
     payload: ReviewAssignmentRequest,
-    current_user: UserRead = Depends(get_current_user),
+    current_user: UserRead = Depends(review_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> ReviewDetailRead:
     review = await get_review_entity_or_404(session, review_id, for_update=True)
@@ -432,7 +436,7 @@ async def assign_review_user(
 async def save_review_response(
     review_id: int,
     payload: ReviewResponseSaveRequest,
-    current_user: UserRead = Depends(get_current_user),
+    current_user: UserRead = Depends(review_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> ReviewDetailRead:
     review = await get_review_entity_or_404(session, review_id, for_update=True)
@@ -489,7 +493,7 @@ def build_review_filters(
     assigned_user_id: int | None,
     q: str | None,
 ) -> list[Any]:
-    filters: list[Any] = []
+    filters: list[Any] = [Product.is_active.is_(True)]
 
     if product_id is not None:
         filters.append(Review.product_id == product_id)
@@ -556,7 +560,7 @@ async def get_review_detail_or_404(
         .outerjoin(assigned_user, assigned_user.id == Review.assigned_user_id)
         .outerjoin(created_by_user, created_by_user.id == Review.created_by_user_id)
         .join(updated_by_user, updated_by_user.id == Review.updated_by_user_id)
-        .where(Review.id == review_id),
+        .where(Review.id == review_id, Product.is_active.is_(True)),
     )
     row = result.one_or_none()
 
@@ -683,7 +687,11 @@ async def get_review_entity_or_404(
     review_id: int,
     for_update: bool = False,
 ) -> Review:
-    statement = select(Review).where(Review.id == review_id)
+    statement = (
+        select(Review)
+        .join(Product, Product.id == Review.product_id)
+        .where(Review.id == review_id, Product.is_active.is_(True))
+    )
     if for_update:
         statement = statement.with_for_update()
 
@@ -699,12 +707,14 @@ async def get_review_entity_or_404(
 
 
 async def get_product_or_404(session: AsyncSession, product_id: int) -> Product:
-    product = await session.get(Product, product_id)
+    product = await session.scalar(
+        select(Product).where(Product.id == product_id, Product.is_active.is_(True)),
+    )
 
     if product is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found",
+            detail="Active product not found",
         )
 
     return product

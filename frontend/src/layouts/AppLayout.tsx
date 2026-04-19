@@ -16,9 +16,23 @@ const navigationItems: NavigationItem[] = [
   {
     to: "/reviews",
     label: "Отзывы",
-    roles: ["admin", "manager", "support", "analyst"],
+    roles: ["admin", "manager", "support"],
     icon: "/images/icons/message-square.svg",
     collapsedIcon: "/images/icons/message-square.svg",
+  },
+  {
+    to: "/catalog",
+    label: "Каталог",
+    roles: ["admin", "manager"],
+    icon: "/images/icons/catalog.svg",
+    collapsedIcon: "/images/icons/catalog.svg",
+  },
+  {
+    to: "/integration",
+    label: "Интеграции",
+    roles: ["admin", "manager"],
+    icon: "/images/icons/download.svg",
+    collapsedIcon: "/images/icons/download.svg",
   },
   {
     to: "/analytics",
@@ -26,13 +40,6 @@ const navigationItems: NavigationItem[] = [
     roles: ["admin", "analyst"],
     icon: "/images/icons/bar-chart.svg",
     collapsedIcon: "/images/icons/bar-chart.svg",
-  },
-  {
-    to: "/catalog",
-    label: "Каталог",
-    roles: ["admin", "manager", "analyst"],
-    icon: "/images/icons/catalog.svg",
-    collapsedIcon: "/images/icons/catalog.svg",
   },
   {
     to: "/users",

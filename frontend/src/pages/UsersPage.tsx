@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { ManagedUser, Role, apiClient } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { Pagination } from "../components/Pagination";
 import { useNotifications } from "../notifications/NotificationContext";
 
 type UserModalMode = "create" | "edit";
@@ -553,6 +554,9 @@ export function UsersPage() {
                       ФИО<span className="required-mark">*</span>
                     </span>
                     <input
+                      maxLength={255}
+                      minLength={1}
+                      required
                       value={mobileCreateForm.fullName}
                       onChange={(event) =>
                         setMobileCreateForm((current) => ({
@@ -568,6 +572,7 @@ export function UsersPage() {
                       Email<span className="required-mark">*</span>
                     </span>
                     <input
+                      required
                       value={mobileCreateForm.email}
                       onChange={(event) =>
                         setMobileCreateForm((current) => ({
@@ -583,6 +588,8 @@ export function UsersPage() {
                       Пароль<span className="required-mark">*</span>
                     </span>
                     <input
+                      minLength={8}
+                      required
                       value={mobileCreateForm.password}
                       onChange={(event) =>
                         setMobileCreateForm((current) => ({
@@ -598,6 +605,7 @@ export function UsersPage() {
                       Роль<span className="required-mark">*</span>
                     </span>
                     <select
+                      required
                       value={mobileCreateForm.roleId}
                       onChange={(event) =>
                         setMobileCreateForm((current) => ({
@@ -714,6 +722,9 @@ export function UsersPage() {
                             </span>
                             <input
                               disabled={!isExpanded}
+                              maxLength={255}
+                              minLength={1}
+                              required={isExpanded}
                               value={isExpanded ? mobileEditForm.fullName : managedUser.full_name}
                               onChange={(event) =>
                                 setMobileEditForm((current) => ({
@@ -730,6 +741,7 @@ export function UsersPage() {
                             </span>
                             <input
                               disabled={!isExpanded}
+                              required={isExpanded}
                               value={isExpanded ? mobileEditForm.email : managedUser.email}
                               onChange={(event) =>
                                 setMobileEditForm((current) => ({
@@ -746,6 +758,7 @@ export function UsersPage() {
                             </span>
                             <select
                               disabled={!isExpanded}
+                              required={isExpanded}
                               value={
                                 isExpanded ? mobileEditForm.roleId : String(managedUser.role.id)
                               }
@@ -798,7 +811,8 @@ export function UsersPage() {
       </div>
 
       {!isLoading && !error ? (
-        <UsersPagination
+        <Pagination
+          ariaLabel="Пагинация пользователей"
           currentPage={currentPage}
           totalPages={totalPages}
           onPageChange={handlePageChange}
@@ -830,6 +844,9 @@ export function UsersPage() {
                   ФИО<span className="required-mark">*</span>
                 </span>
                 <input
+                  maxLength={255}
+                  minLength={1}
+                  required
                   value={form.fullName}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, fullName: event.target.value }))
@@ -842,6 +859,7 @@ export function UsersPage() {
                   Email<span className="required-mark">*</span>
                 </span>
                 <input
+                  required
                   value={form.email}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, email: event.target.value }))
@@ -855,6 +873,8 @@ export function UsersPage() {
                     Пароль<span className="required-mark">*</span>
                   </span>
                   <input
+                    minLength={8}
+                    required
                     value={form.password}
                     onChange={(event) =>
                       setForm((current) => ({ ...current, password: event.target.value }))
@@ -868,6 +888,7 @@ export function UsersPage() {
                   Роль<span className="required-mark">*</span>
                 </span>
                 <select
+                  required
                   value={form.roleId}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, roleId: event.target.value }))
@@ -895,54 +916,6 @@ export function UsersPage() {
         </div>
       ) : null}
     </section>
-  );
-}
-
-function UsersPagination({
-  currentPage,
-  totalPages,
-  onPageChange,
-}: {
-  currentPage: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
-}) {
-  if (totalPages <= 1) {
-    return null;
-  }
-
-  const pages = Array.from({ length: totalPages }, (_, index) => index + 1);
-
-  return (
-    <nav className="users-pagination" aria-label="Пагинация пользователей">
-      <button
-        className="pagination-button"
-        disabled={currentPage === 1}
-        onClick={() => onPageChange(currentPage - 1)}
-        type="button"
-      >
-        Назад
-      </button>
-      {pages.map((page) => (
-        <button
-          aria-current={page === currentPage ? "page" : undefined}
-          className={`pagination-button ${page === currentPage ? "is-active" : ""}`}
-          key={page}
-          onClick={() => onPageChange(page)}
-          type="button"
-        >
-          {page}
-        </button>
-      ))}
-      <button
-        className="pagination-button"
-        disabled={currentPage === totalPages}
-        onClick={() => onPageChange(currentPage + 1)}
-        type="button"
-      >
-        Вперед
-      </button>
-    </nav>
   );
 }
 

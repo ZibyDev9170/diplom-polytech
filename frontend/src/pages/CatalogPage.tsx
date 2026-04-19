@@ -7,6 +7,7 @@ import {
   apiClient,
 } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { Pagination } from "../components/Pagination";
 import { useNotifications } from "../notifications/NotificationContext";
 
 type CatalogSection = "products" | "statuses" | "sources";
@@ -54,11 +55,34 @@ const catalogSections: Array<{ id: CatalogSection; label: string }> = [
   { id: "sources", label: "Источники" },
 ];
 
+const CATALOG_MOBILE_ITEMS_PER_PAGE = 10;
+const CATALOG_DESKTOP_RESERVED_HEIGHT = 300;
+const CATALOG_DESKTOP_ROW_HEIGHT = 53;
+const MIN_DESKTOP_CATALOG_ITEMS_PER_PAGE = 5;
+const MOBILE_VIEWPORT_QUERY = "(max-width: 760px)";
+
 const dateFormatter = new Intl.DateTimeFormat("ru-RU", {
   day: "2-digit",
   month: "2-digit",
   year: "numeric",
 });
+
+function calculateCatalogItemsPerPage() {
+  if (typeof window === "undefined") {
+    return CATALOG_MOBILE_ITEMS_PER_PAGE;
+  }
+
+  if (window.matchMedia(MOBILE_VIEWPORT_QUERY).matches) {
+    return CATALOG_MOBILE_ITEMS_PER_PAGE;
+  }
+
+  const availableTableHeight = window.innerHeight - CATALOG_DESKTOP_RESERVED_HEIGHT;
+
+  return Math.max(
+    MIN_DESKTOP_CATALOG_ITEMS_PER_PAGE,
+    Math.floor(availableTableHeight / CATALOG_DESKTOP_ROW_HEIGHT),
+  );
+}
 
 export function CatalogPage() {
   const { token } = useAuth();
@@ -83,6 +107,8 @@ export function CatalogPage() {
   const [mobileStatusForm, setMobileStatusForm] = useState<StatusFormState>(emptyStatusForm);
   const [mobileSourceForm, setMobileSourceForm] = useState<SourceFormState>(emptySourceForm);
   const [mobileSavingKey, setMobileSavingKey] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(calculateCatalogItemsPerPage);
 
   const loadCatalog = useCallback(async () => {
     if (!token) {
@@ -124,7 +150,21 @@ export function CatalogPage() {
     setMobileProductForm(emptyProductForm);
     setMobileStatusForm(emptyStatusForm);
     setMobileSourceForm(emptySourceForm);
+    setCurrentPage(1);
   }, [activeSection]);
+
+  useEffect(() => {
+    const updateItemsPerPage = () => {
+      setItemsPerPage(calculateCatalogItemsPerPage());
+    };
+
+    updateItemsPerPage();
+    window.addEventListener("resize", updateItemsPerPage);
+
+    return () => {
+      window.removeEventListener("resize", updateItemsPerPage);
+    };
+  }, []);
 
   const activeTitle = useMemo(() => {
     if (activeSection === "products") {
@@ -151,6 +191,33 @@ export function CatalogPage() {
 
     return `${action} источник`;
   }, [activeSection, modalMode]);
+
+  const activeItemsCount =
+    activeSection === "products"
+      ? products.length
+      : activeSection === "statuses"
+        ? statuses.length
+        : sources.length;
+  const totalPages = Math.max(1, Math.ceil(activeItemsCount / itemsPerPage));
+  const pageStartIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedProducts = useMemo(
+    () => products.slice(pageStartIndex, pageStartIndex + itemsPerPage),
+    [itemsPerPage, pageStartIndex, products],
+  );
+  const paginatedStatuses = useMemo(
+    () => statuses.slice(pageStartIndex, pageStartIndex + itemsPerPage),
+    [itemsPerPage, pageStartIndex, statuses],
+  );
+  const paginatedSources = useMemo(
+    () => sources.slice(pageStartIndex, pageStartIndex + itemsPerPage),
+    [itemsPerPage, pageStartIndex, sources],
+  );
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const openCreateModal = () => {
     resetForms();
@@ -195,6 +262,14 @@ export function CatalogPage() {
       setModalMode(null);
       resetForms();
     }
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    setExpandedMobileKey(null);
+    setMobileProductForm(emptyProductForm);
+    setMobileStatusForm(emptyStatusForm);
+    setMobileSourceForm(emptySourceForm);
   };
 
   const resetForms = () => {
@@ -602,13 +677,13 @@ export function CatalogPage() {
         ) : (
           <div className="users-table-scroll">
             {activeSection === "products" ? (
-              <ProductsTable products={products} onEdit={openProductEditModal} />
+              <ProductsTable products={paginatedProducts} onEdit={openProductEditModal} />
             ) : null}
             {activeSection === "statuses" ? (
-              <StatusesTable statuses={statuses} onEdit={openStatusEditModal} />
+              <StatusesTable statuses={paginatedStatuses} onEdit={openStatusEditModal} />
             ) : null}
             {activeSection === "sources" ? (
-              <SourcesTable sources={sources} onEdit={openSourceEditModal} />
+              <SourcesTable sources={paginatedSources} onEdit={openSourceEditModal} />
             ) : null}
           </div>
         )}
@@ -620,8 +695,8 @@ export function CatalogPage() {
         ) : error ? (
           <p className="users-state users-state--error">{error}</p>
         ) : activeSection === "products" ? (
-          products.length > 0 ? (
-            products.map((product) => {
+          paginatedProducts.length > 0 ? (
+            paginatedProducts.map((product) => {
               const key = buildCatalogKey("products", product.id);
               const isExpanded = expandedMobileKey === key;
 
@@ -636,7 +711,7 @@ export function CatalogPage() {
                     type="button"
                   >
                     <span>ID {product.id}</span>
-                    <strong>{product.name}</strong>
+                    <strong title={product.name}>{truncateText(product.name, 30)}</strong>
                     <span>{product.sku}</span>
                   </button>
                   <div className="catalog-mobile-card-panel">
@@ -690,8 +765,8 @@ export function CatalogPage() {
             <p className="users-state">Товары пока не добавлены.</p>
           )
         ) : activeSection === "statuses" ? (
-          statuses.length > 0 ? (
-            statuses.map((statusItem) => {
+          paginatedStatuses.length > 0 ? (
+            paginatedStatuses.map((statusItem) => {
               const key = buildCatalogKey("statuses", statusItem.id);
               const isExpanded = expandedMobileKey === key;
 
@@ -751,8 +826,8 @@ export function CatalogPage() {
           ) : (
             <p className="users-state">Статусы пока не добавлены.</p>
           )
-        ) : sources.length > 0 ? (
-          sources.map((source) => {
+        ) : paginatedSources.length > 0 ? (
+          paginatedSources.map((source) => {
             const key = buildCatalogKey("sources", source.id);
             const isExpanded = expandedMobileKey === key;
 
@@ -803,6 +878,15 @@ export function CatalogPage() {
           <p className="users-state">Источники пока не добавлены.</p>
         )}
       </div>
+
+      {!isLoading && !error ? (
+        <Pagination
+          ariaLabel="Пагинация каталога"
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={handlePageChange}
+        />
+      ) : null}
 
       {modalMode ? (
         <div className="modal-overlay" role="presentation" onMouseDown={closeModal}>
@@ -874,7 +958,9 @@ function ProductsTable({
           products.map((product) => (
             <tr key={product.id}>
               <td>{product.id}</td>
-              <td>{product.name}</td>
+              <td className="catalog-product-name-cell" title={product.name}>
+                {truncateText(product.name, 30)}
+              </td>
               <td>{product.sku}</td>
               <td>
                 <span
@@ -1011,6 +1097,9 @@ function ProductForm({
           Название<span className="required-mark">*</span>
         </span>
         <input
+          maxLength={255}
+          minLength={1}
+          required
           type="text"
           value={form.name}
           onChange={(event) => onChange({ ...form, name: event.target.value })}
@@ -1021,6 +1110,9 @@ function ProductForm({
           SKU<span className="required-mark">*</span>
         </span>
         <input
+          maxLength={100}
+          minLength={1}
+          required
           type="text"
           value={form.sku}
           onChange={(event) => onChange({ ...form, sku: event.target.value })}
@@ -1056,6 +1148,9 @@ function StatusForm({
           Код<span className="required-mark">*</span>
         </span>
         <input
+          maxLength={50}
+          minLength={1}
+          required
           type="text"
           value={form.code}
           onChange={(event) => onChange({ ...form, code: event.target.value })}
@@ -1066,6 +1161,9 @@ function StatusForm({
           Название<span className="required-mark">*</span>
         </span>
         <input
+          maxLength={100}
+          minLength={1}
+          required
           type="text"
           value={form.name}
           onChange={(event) => onChange({ ...form, name: event.target.value })}
@@ -1077,6 +1175,7 @@ function StatusForm({
         </span>
         <input
           min="0"
+          required
           step="1"
           type="number"
           value={form.sortOrder}
@@ -1113,6 +1212,9 @@ function SourceForm({
           Код<span className="required-mark">*</span>
         </span>
         <input
+          maxLength={50}
+          minLength={1}
+          required
           type="text"
           value={form.code}
           onChange={(event) => onChange({ ...form, code: event.target.value })}
@@ -1123,6 +1225,9 @@ function SourceForm({
           Название<span className="required-mark">*</span>
         </span>
         <input
+          maxLength={100}
+          minLength={1}
+          required
           type="text"
           value={form.name}
           onChange={(event) => onChange({ ...form, name: event.target.value })}
@@ -1146,6 +1251,10 @@ function sortSources(first: ReviewSource, second: ReviewSource) {
 
 function buildCatalogKey(section: CatalogSection, id: number) {
   return `${section}:${id}`;
+}
+
+function truncateText(value: string, maxLength: number) {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
 }
 
 function notifyCatalogSaveError(

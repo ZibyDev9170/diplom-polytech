@@ -3,11 +3,12 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { useAuth } from "./auth/AuthContext";
 import { AppLayout } from "./layouts/AppLayout";
+import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { CatalogPage } from "./pages/CatalogPage";
 import { ForbiddenPage } from "./pages/ForbiddenPage";
+import { IntegrationPage } from "./pages/IntegrationPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
-import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ReviewDetailPage, ReviewsPage } from "./pages/ReviewsPage";
 import { UsersPage } from "./pages/UsersPage";
 
@@ -20,21 +21,18 @@ export function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route index element={<RoleLandingRedirect />} />
-          <Route path="reviews" element={<ReviewsPage />} />
-          <Route path="reviews/:reviewId" element={<ReviewDetailPage />} />
-          <Route element={<ProtectedRoute roles={["admin", "manager", "analyst"]} />}>
+          <Route element={<ProtectedRoute roles={["admin", "manager", "support"]} />}>
+            <Route path="reviews" element={<ReviewsPage />} />
+            <Route path="reviews/:reviewId" element={<ReviewDetailPage />} />
+          </Route>
+          <Route element={<ProtectedRoute roles={["admin", "manager"]} />}>
             <Route path="catalog" element={<CatalogPage />} />
           </Route>
+          <Route element={<ProtectedRoute roles={["admin", "manager"]} />}>
+            <Route path="integration" element={<IntegrationPage />} />
+          </Route>
           <Route element={<ProtectedRoute roles={["admin", "analyst"]} />}>
-            <Route
-              path="analytics"
-              element={
-                <PlaceholderPage
-                  eyebrow="Аналитика"
-                  text="Здесь появятся динамика отзывов, распределение статусов и рейтинг товаров."
-                />
-              }
-            />
+            <Route path="analytics" element={<AnalyticsPage />} />
           </Route>
           <Route element={<ProtectedRoute roles={["admin"]} />}>
             <Route path="users" element={<UsersPage />} />

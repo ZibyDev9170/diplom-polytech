@@ -1,5 +1,10 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import {
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 
 import {
   ReviewDetail,
@@ -9,6 +14,7 @@ import {
   apiClient,
 } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { Pagination } from "../components/Pagination";
 import { useNotifications } from "../notifications/NotificationContext";
 
 type ReviewFilters = {
@@ -81,11 +87,16 @@ export function ReviewsPage() {
   const { token } = useAuth();
   const { notify } = useNotifications();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [referenceData, setReferenceData] = useState<ReviewReferenceData | null>(null);
   const [reviews, setReviews] = useState<ReviewListItem[]>([]);
-  const [filters, setFilters] = useState<ReviewFilters>(emptyFilters);
+  const [filters, setFilters] = useState<ReviewFilters>(() =>
+    readReviewFiltersFromSearchParams(searchParams),
+  );
   const [totalReviews, setTotalReviews] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(() =>
+    readReviewPageFromSearchParams(searchParams),
+  );
   const [isReferenceLoading, setIsReferenceLoading] = useState(true);
   const [isReviewsLoading, setIsReviewsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -164,6 +175,14 @@ export function ReviewsPage() {
     loadReviews(currentPage, filters);
   }, [currentPage, filters, loadReviews]);
 
+  useEffect(() => {
+    const nextSearchParams = buildReviewSearchParams(filters, currentPage);
+
+    if (nextSearchParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextSearchParams, { replace: true });
+    }
+  }, [currentPage, filters, searchParams, setSearchParams]);
+
   const totalPages = Math.max(1, Math.ceil(totalReviews / REVIEWS_PER_PAGE));
 
   useEffect(() => {
@@ -177,6 +196,11 @@ export function ReviewsPage() {
 
     return manualSource ? String(manualSource.id) : "";
   }, [referenceData]);
+  const reviewsListSearch = useMemo(() => {
+    const queryString = buildReviewSearchParams(filters, currentPage).toString();
+
+    return queryString ? `?${queryString}` : "";
+  }, [currentPage, filters]);
 
   const handleFilterChange = (field: keyof ReviewFilters, value: string) => {
     setCurrentPage(1);
@@ -438,11 +462,13 @@ export function ReviewsPage() {
                     <tr
                       className="reviews-table-row"
                       key={review.id}
-                      onClick={() => navigate(`/reviews/${review.id}`)}
+                      onClick={() => navigate(`/reviews/${review.id}${reviewsListSearch}`)}
                     >
                       <td>{review.id}</td>
                       <td>{review.product.name}</td>
-                      <td className="review-text-cell">{review.review_text}</td>
+                      <td className="review-text-cell" title={review.review_text}>
+                        {truncateText(review.review_text, 30)}
+                      </td>
                       <td>{formatRating(review.rating)}</td>
                       <td>
                         <span className="status-badge status-badge--review">
@@ -472,25 +498,26 @@ export function ReviewsPage() {
           <p className="users-state users-state--error">{error}</p>
         ) : reviews.length > 0 ? (
           reviews.map((review) => (
-              <button
-                className="review-mobile-card"
-                key={review.id}
-                type="button"
-                onClick={() => navigate(`/reviews/${review.id}`)}
-              >
-                <span>ID {review.id}</span>
-                <strong>{review.product.name}</strong>
-                <span>{review.review_text}</span>
-                <span>{review.status.name}</span>
-              </button>
-            ))
+            <button
+              className="review-mobile-card"
+              key={review.id}
+              type="button"
+              onClick={() => navigate(`/reviews/${review.id}${reviewsListSearch}`)}
+            >
+              <span>ID {review.id}</span>
+              <strong>{review.product.name}</strong>
+              <span className="review-mobile-card-text">{review.review_text}</span>
+              <span>{review.status.name}</span>
+            </button>
+          ))
         ) : (
           <p className="users-state">Отзывы пока не добавлены.</p>
         )}
       </div>
 
       {!isLoading && !error ? (
-        <ReviewsPagination
+        <Pagination
+          ariaLabel="Пагинация отзывов"
           currentPage={currentPage}
           totalPages={totalPages}
           onPageChange={setCurrentPage}
@@ -580,6 +607,7 @@ export function ReviewsPage() {
 export function ReviewDetailPage() {
   const { reviewId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { token } = useAuth();
   const { notify } = useNotifications();
   const [referenceData, setReferenceData] = useState<ReviewReferenceData | null>(null);
@@ -869,7 +897,11 @@ export function ReviewDetailPage() {
   return (
     <section className="review-detail-page">
       <div className="review-detail-actions">
-        <button className="review-back-button" type="button" onClick={() => navigate("/reviews")}>
+        <button
+          className="review-back-button"
+          type="button"
+          onClick={() => navigate(`/reviews${location.search}`)}
+        >
           <img src="/images/icons/arrow-left.svg" alt="" aria-hidden="true" />
           <span>Вернуться к списку</span>
         </button>
@@ -1089,6 +1121,7 @@ function ReviewFormModal({
           <label>
             <span>Внешний ID</span>
             <input
+              maxLength={255}
               placeholder="Необязательно"
               type="text"
               value={form.externalId}
@@ -1101,6 +1134,7 @@ function ReviewFormModal({
               Товар<span className="required-mark">*</span>
             </span>
             <select
+              required
               value={form.productId}
               onChange={(event) => onChange("productId", event.target.value)}
             >
@@ -1118,7 +1152,9 @@ function ReviewFormModal({
               Текст отзыва<span className="required-mark">*</span>
             </span>
             <textarea
+              minLength={1}
               placeholder="Текст отзыва..."
+              required
               value={form.reviewText}
               onChange={(event) => onChange("reviewText", event.target.value)}
             />
@@ -1130,6 +1166,7 @@ function ReviewFormModal({
                 Оценка<span className="required-mark">*</span>
               </span>
               <select
+                required
                 value={form.rating}
                 onChange={(event) => onChange("rating", event.target.value)}
               >
@@ -1147,6 +1184,7 @@ function ReviewFormModal({
                 Источник<span className="required-mark">*</span>
               </span>
               <select
+                required
                 value={form.sourceId}
                 onChange={(event) => onChange("sourceId", event.target.value)}
               >
@@ -1164,6 +1202,7 @@ function ReviewFormModal({
                 Дата<span className="required-mark">*</span>
               </span>
               <input
+                required
                 type="date"
                 value={form.reviewDate}
                 onChange={(event) => onChange("reviewDate", event.target.value)}
@@ -1303,54 +1342,6 @@ function FilterSelect({
   );
 }
 
-function ReviewsPagination({
-  currentPage,
-  totalPages,
-  onPageChange,
-}: {
-  currentPage: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
-}) {
-  if (totalPages <= 1) {
-    return null;
-  }
-
-  const pages = Array.from({ length: totalPages }, (_, index) => index + 1);
-
-  return (
-    <nav className="users-pagination" aria-label="Пагинация отзывов">
-      <button
-        className="pagination-button"
-        disabled={currentPage === 1}
-        onClick={() => onPageChange(currentPage - 1)}
-        type="button"
-      >
-        Назад
-      </button>
-      {pages.map((page) => (
-        <button
-          aria-current={page === currentPage ? "page" : undefined}
-          className={`pagination-button ${page === currentPage ? "is-active" : ""}`}
-          key={page}
-          onClick={() => onPageChange(page)}
-          type="button"
-        >
-          {page}
-        </button>
-      ))}
-      <button
-        className="pagination-button"
-        disabled={currentPage === totalPages}
-        onClick={() => onPageChange(currentPage + 1)}
-        type="button"
-      >
-        Вперед
-      </button>
-    </nav>
-  );
-}
-
 function HistoryList({
   children,
   title,
@@ -1420,6 +1411,51 @@ function buildReviewListParams(filters: ReviewFilters, page: number): ReviewList
   };
 }
 
+function buildReviewSearchParams(filters: ReviewFilters, page: number): URLSearchParams {
+  const searchParams = new URLSearchParams();
+  const entries: Array<[string, string]> = [
+    ["q", filters.q.trim()],
+    ["product_id", filters.productId],
+    ["status_id", filters.statusId],
+    ["source_id", filters.sourceId],
+    ["rating", filters.rating],
+    ["assigned_user_id", filters.assignedUserId],
+    ["date_from", filters.dateFrom],
+    ["date_to", filters.dateTo],
+  ];
+
+  entries.forEach(([key, value]) => {
+    if (value) {
+      searchParams.set(key, value);
+    }
+  });
+
+  if (page > 1) {
+    searchParams.set("page", String(page));
+  }
+
+  return searchParams;
+}
+
+function readReviewFiltersFromSearchParams(searchParams: URLSearchParams): ReviewFilters {
+  return {
+    q: searchParams.get("q") || "",
+    productId: searchParams.get("product_id") || "",
+    statusId: searchParams.get("status_id") || "",
+    sourceId: searchParams.get("source_id") || "",
+    rating: searchParams.get("rating") || "",
+    assignedUserId: searchParams.get("assigned_user_id") || "",
+    dateFrom: searchParams.get("date_from") || "",
+    dateTo: searchParams.get("date_to") || "",
+  };
+}
+
+function readReviewPageFromSearchParams(searchParams: URLSearchParams): number {
+  const page = Number(searchParams.get("page"));
+
+  return Number.isInteger(page) && page > 0 ? page : 1;
+}
+
 function formatDate(value: string) {
   const date = new Date(value);
 
@@ -1442,6 +1478,10 @@ function formatDateTime(value: string) {
 
 function formatRating(rating: number) {
   return `${rating} ${rating === 1 ? "звезда" : rating < 5 ? "звезды" : "звезд"}`;
+}
+
+function truncateText(value: string, maxLength: number) {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
 }
 
 function getTodayInputValue() {
