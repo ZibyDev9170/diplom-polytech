@@ -544,6 +544,10 @@ a {
   width: min(100%, 480px);
 }
 
+.catalog-modal--source {
+  width: min(100%, 760px);
+}
+
 .catalog-mobile-list {
   display: none;
 }
@@ -593,6 +597,24 @@ a {
   display: grid;
   gap: 14px;
   padding: 0 14px 14px;
+}
+
+.catalog-source-template-section {
+  display: grid;
+  gap: 14px;
+  padding-top: 6px;
+  border-top: 1px solid #d7dde5;
+}
+
+.catalog-source-template-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 12px;
+}
+
+.catalog-source-template-full-width {
+  display: grid;
+  gap: 6px;
 }
 
 .analytics-page {
@@ -1053,6 +1075,17 @@ a {
   min-width: 0;
 }
 
+.integration-segmented {
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
+  width: fit-content;
+  max-width: 100%;
+}
+
+.catalog-segmented.integration-editor-segmented {
+  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  width: fit-content;
+}
+
 .integration-panel {
   display: grid;
   gap: 16px;
@@ -1085,8 +1118,177 @@ a {
   gap: 12px;
 }
 
+.integration-controls--custom {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .integration-import-button {
+  min-width: 0;
+}
+
+.integration-controls--custom .primary-button,
+.integration-controls--custom .secondary-button {
+  width: 100%;
+}
+
+.integration-generic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.integration-generic-grid--single-wide {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.integration-fetch-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(2, minmax(140px, 180px));
+  gap: 12px;
+}
+
+.integration-mapping-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.integration-template-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 12px;
+  margin-left: auto;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.integration-template-actions .primary-button,
+.integration-template-actions .secondary-button {
+  width: 168px;
+  min-width: 168px;
+  padding-inline: 16px;
+}
+
+.integration-file-field input[type="file"] {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid #a0a0a0;
+  border-radius: 8px;
+  color: #161616;
+  background: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 400;
+}
+
+.integration-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.integration-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.integration-info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.integration-info-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: help;
+}
+
+.integration-info-button img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.integration-info-button:focus-visible {
+  outline: 2px solid #416CBB;
+  outline-offset: 2px;
+}
+
+.integration-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  z-index: 30;
   min-width: 220px;
+  max-width: min(280px, 70vw);
+  padding: 10px 12px;
+  border: 1px solid #a0a0a0;
+  border-radius: 8px;
+  color: #323232;
+  background: #ffffff;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+  font-size: 0.82rem;
+  font-weight: 400;
+  line-height: 1.4;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-4px);
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    visibility 0.18s ease;
+}
+
+.integration-tooltip.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.integration-tooltip::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  border-top: 1px solid #a0a0a0;
+  border-left: 1px solid #a0a0a0;
+  background: #ffffff;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.integration-json-field {
+  display: grid;
+  gap: 8px;
+  color: #323232;
+  font-weight: 700;
+}
+
+.integration-json-field textarea {
+  width: 100%;
+  min-height: 280px;
+  padding: 12px 14px;
+  border: 1px solid #a0a0a0;
+  border-radius: 8px;
+  color: #161616;
+  background: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.92rem;
+  font-weight: 400;
+  line-height: 1.5;
+  resize: vertical;
 }
 
 .integration-kpi-grid {
@@ -1098,6 +1300,47 @@ a {
 .integration-kpi-grid .analytics-kpi-card {
   grid-template-columns: 1fr;
   min-height: 104px;
+}
+
+@media (max-width: 768px) {
+  .integration-editor-toolbar {
+    align-items: stretch;
+  }
+
+  .catalog-segmented.integration-editor-segmented {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .integration-template-actions {
+    width: 100%;
+    margin-left: 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+  }
+
+  .integration-template-actions .primary-button,
+  .integration-template-actions .secondary-button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .integration-tooltip {
+    left: auto;
+    right: 0;
+    transform: translateY(-4px);
+  }
+
+  .integration-tooltip.is-visible {
+    transform: translateY(0);
+  }
+
+  .integration-tooltip::before {
+    left: auto;
+    right: 10px;
+    transform: rotate(45deg);
+  }
 }
 
 .integration-section-header {
@@ -1202,6 +1445,99 @@ a {
 
 .integration-items-mobile-list {
   display: none;
+}
+
+.integration-example-panel {
+  gap: 12px;
+}
+
+.integration-code-block {
+  margin: 0;
+  border: 1px solid #d4d4d4;
+  border-radius: 8px;
+  color: #1f1f1f;
+  background: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.integration-code-editor {
+  overflow: hidden;
+  border: 1px solid #d4d4d4;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.integration-code-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #d4d4d4;
+  color: #5f6368;
+  background: #f3f3f3;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.integration-code-block--editor {
+  padding: 10px 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.integration-code-line {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: start;
+  min-width: max-content;
+}
+
+.integration-code-line-number {
+  padding: 0 12px 0 14px;
+  color: #8a8f98;
+  text-align: right;
+  user-select: none;
+}
+
+.integration-code-line-content {
+  display: block;
+  min-width: max-content;
+  padding-right: 16px;
+  white-space: pre;
+}
+
+.integration-code-token--key {
+  color: #0451a5;
+}
+
+.integration-code-token--string {
+  color: #a31515;
+}
+
+.integration-code-token--number {
+  color: #098658;
+}
+
+.integration-code-token--literal {
+  color: #0000ff;
+}
+
+.integration-error-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  color: #323232;
+}
+
+.integration-error-list li {
+  overflow-wrap: anywhere;
+  line-height: 1.45;
 }
 
 .reviews-page {
@@ -2054,6 +2390,10 @@ a {
   border-top: 1px solid #d7dde5;
 }
 
+.modal-actions--triple {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .modal-actions .primary-button {
   width: 100%;
   padding: 0 16px;
@@ -2625,12 +2965,32 @@ h2 {
   }
 
   .integration-controls,
+  .integration-controls--custom,
+  .integration-fetch-grid,
+  .integration-generic-grid,
+  .integration-generic-grid--single-wide,
+  .integration-mapping-grid,
   .integration-kpi-grid {
     grid-template-columns: 1fr;
   }
 
+  .integration-template-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
   .integration-panel {
     padding: 12px;
+  }
+
+  .integration-segmented {
+    width: 100%;
+  }
+
+  .catalog-segmented.integration-editor-segmented {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
   }
 
   .integration-import-button {

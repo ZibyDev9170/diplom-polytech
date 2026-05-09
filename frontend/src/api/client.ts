@@ -166,6 +166,7 @@ export type AnalyticsProductDetail = {
 
 export type ExternalReviewPayloadItem = {
   external_id: string;
+  product_id?: number;
   product_sku?: string;
   product_name?: string;
   review_text: string;
@@ -177,6 +178,43 @@ export type ExternalReviewPayloadItem = {
 export type ExternalReviewsPayload = {
   source_code: string;
   reviews: ExternalReviewPayloadItem[];
+};
+
+export type GenericReviewImportPayload = {
+  source_code: string;
+  source_name?: string;
+  reviews: unknown[];
+};
+
+export type ExternalSourceFieldMapping = {
+  external_id: string;
+  product_id?: string;
+  product_sku?: string;
+  product_name?: string;
+  review_text: string;
+  rating: string;
+  review_date: string;
+};
+
+export type ExternalSourceRequestPayload = {
+  source_code: string;
+  source_name?: string;
+  endpoint_url: string;
+  offset?: number;
+  limit?: number;
+  reviews_path?: string;
+  mapping: ExternalSourceFieldMapping;
+};
+
+export type ExternalSourcePreviewResponse = {
+  source_code: string;
+  source_name: string | null;
+  endpoint_url: string;
+  total_count: number;
+  valid_count: number;
+  invalid_count: number;
+  reviews: ExternalReviewPayloadItem[];
+  errors: string[];
 };
 
 export type ImportItem = {
@@ -527,6 +565,24 @@ export const apiClient = {
         token,
       },
     ),
+  importExternalReviews: (token: string, payload: GenericReviewImportPayload) =>
+    request<ImportBatch>("/integration/reviews/import", {
+      method: "POST",
+      token,
+      body: JSON.stringify(payload),
+    }),
+  previewExternalSourceReviews: (token: string, payload: ExternalSourceRequestPayload) =>
+    request<ExternalSourcePreviewResponse>("/integration/external-source/reviews/preview", {
+      method: "POST",
+      token,
+      body: JSON.stringify(payload),
+    }),
+  importExternalSourceReviews: (token: string, payload: ExternalSourceRequestPayload) =>
+    request<ImportBatch>("/integration/external-source/reviews/import", {
+      method: "POST",
+      token,
+      body: JSON.stringify(payload),
+    }),
   getImportBatches: (token: string, params: ImportBatchListParams = {}) =>
     request<ImportBatch[]>(`/integration/import-batches${buildQueryString(params)}`, {
       token,

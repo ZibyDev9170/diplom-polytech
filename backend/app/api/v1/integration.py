@@ -11,15 +11,22 @@ from app.db.session import get_db_session
 from app.models.catalog import ReviewSource
 from app.models.integration import ImportBatch, ImportItem
 from app.schemas.auth import UserRead
-from app.schemas.integration import ImportBatchRead, ImportItemRead
+from app.schemas.integration import (
+    ImportBatchRead,
+    ImportItemRead,
+    RemoteReviewPreviewRead,
+    RemoteReviewSourceRequest,
+)
 from app.schemas.reviews import ReviewSourceRead
 from app.services.integration import (
     build_perekrestok_review_payload,
     build_perekrestok_review_payload_preview,
+    build_remote_review_payload,
+    build_remote_review_payload_preview,
     build_mock_review_payload,
     build_mock_review_payload_preview,
     get_or_create_perekrestok_source,
-    get_source_by_code_or_none,
+    get_or_create_review_source,
     import_external_reviews,
 )
 
@@ -37,6 +44,7 @@ async def import_reviews_from_external_source(
         examples=[
             {
                 "source_code": "marketplace",
+                "source_name": "Marketplace Reviews",
                 "reviews": [
                     {
                         "external_id": "marketplace-10001",
@@ -55,19 +63,91 @@ async def import_reviews_from_external_source(
 ) -> ImportBatchRead:
     source_code = get_required_source_code(payload)
     raw_reviews = get_required_reviews_list(payload)
-    source = await get_source_by_code_or_none(session, source_code)
-
-    if source is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Review source was not found by source_code",
-        )
+    source_name = get_optional_source_name(payload)
+    source = await get_or_create_review_source(session, source_code, source_name)
 
     try:
         result = await import_external_reviews(
             session=session,
             source=source,
             raw_reviews=raw_reviews,
+            current_user=current_user,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
+
+    await session.commit()
+
+    return build_import_batch_read(result.batch, result.source, result.items)
+
+
+@router.post(
+    "/external-source/reviews/preview",
+    response_model=RemoteReviewPreviewRead,
+)
+async def preview_remote_source_reviews(
+    payload: RemoteReviewSourceRequest,
+    _: UserRead = Depends(require_roles("admin", "manager")),
+) -> RemoteReviewPreviewRead:
+    try:
+        preview = await build_remote_review_payload_preview(
+            endpoint_url=str(payload.endpoint_url),
+            source_code=payload.source_code,
+            source_name=payload.source_name,
+            offset=payload.offset,
+            limit=payload.limit,
+            reviews_path=payload.reviews_path,
+            mapping=payload.mapping,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    return build_remote_preview_read(preview)
+
+
+@router.post(
+    "/external-source/reviews/import",
+    response_model=ImportBatchRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_remote_source_reviews(
+    payload: RemoteReviewSourceRequest,
+    current_user: UserRead = Depends(require_roles("admin", "manager")),
+    session: AsyncSession = Depends(get_db_session),
+) -> ImportBatchRead:
+    try:
+        prepared_payload = await build_remote_review_payload(
+            endpoint_url=str(payload.endpoint_url),
+            source_code=payload.source_code,
+            source_name=payload.source_name,
+            offset=payload.offset,
+            limit=payload.limit,
+            reviews_path=payload.reviews_path,
+            mapping=payload.mapping,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    source = await get_or_create_review_source(
+        session,
+        prepared_payload["source_code"],
+        prepared_payload.get("source_name"),
+    )
+
+    try:
+        result = await import_external_reviews(
+            session=session,
+            source=source,
+            raw_reviews=prepared_payload["reviews"],
             current_user=current_user,
         )
     except RuntimeError as exc:
@@ -278,6 +358,16 @@ def get_required_reviews_list(payload: dict[str, Any]) -> list[Any]:
     return reviews
 
 
+def get_optional_source_name(payload: dict[str, Any]) -> str | None:
+    source_name = payload.get("source_name")
+
+    if not isinstance(source_name, str):
+        return None
+
+    normalized_name = source_name.strip()
+    return normalized_name or None
+
+
 def build_import_batch_read(
     batch: ImportBatch,
     source: ReviewSource,
@@ -310,3 +400,16 @@ def build_import_item_read(item: ImportItem) -> ImportItemRead:
 
 def build_source_read(source: ReviewSource) -> ReviewSourceRead:
     return ReviewSourceRead(id=source.id, code=source.code, name=source.name)
+
+
+def build_remote_preview_read(preview) -> RemoteReviewPreviewRead:
+    return RemoteReviewPreviewRead(
+        source_code=preview.source_code,
+        source_name=preview.source_name,
+        endpoint_url=preview.endpoint_url,
+        total_count=preview.total_count,
+        valid_count=len(preview.valid_reviews),
+        invalid_count=len(preview.errors),
+        reviews=preview.valid_reviews,
+        errors=preview.errors,
+    )

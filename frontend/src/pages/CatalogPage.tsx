@@ -31,6 +31,18 @@ type SourceFormState = {
   name: string;
 };
 
+type SourceTemplateFormState = {
+  endpointUrl: string;
+  reviewsPath: string;
+  externalIdPath: string;
+  productIdPath: string;
+  productSkuPath: string;
+  productNamePath: string;
+  reviewTextPath: string;
+  ratingPath: string;
+  reviewDatePath: string;
+};
+
 const emptyProductForm: ProductFormState = {
   name: "",
   sku: "",
@@ -49,6 +61,30 @@ const emptySourceForm: SourceFormState = {
   name: "",
 };
 
+const emptySourceTemplateForm: SourceTemplateFormState = {
+  endpointUrl: "",
+  reviewsPath: "",
+  externalIdPath: "",
+  productIdPath: "",
+  productSkuPath: "",
+  productNamePath: "",
+  reviewTextPath: "",
+  ratingPath: "",
+  reviewDatePath: "",
+};
+
+const sourceTemplatePlaceholders = {
+  endpointUrl: "https://example.com/api/reviews",
+  reviewsPath: "data.reviews",
+  externalIdPath: "external_id",
+  productIdPath: "product_id",
+  productSkuPath: "",
+  productNamePath: "product_name",
+  reviewTextPath: "review_text",
+  ratingPath: "rating",
+  reviewDatePath: "",
+};
+
 const catalogSections: Array<{ id: CatalogSection; label: string }> = [
   { id: "products", label: "Товары" },
   { id: "statuses", label: "Статусы" },
@@ -60,6 +96,7 @@ const CATALOG_DESKTOP_RESERVED_HEIGHT = 300;
 const CATALOG_DESKTOP_ROW_HEIGHT = 53;
 const MIN_DESKTOP_CATALOG_ITEMS_PER_PAGE = 5;
 const MOBILE_VIEWPORT_QUERY = "(max-width: 760px)";
+const TEMPLATE_STORAGE_PREFIX = "integration-template:";
 
 const dateFormatter = new Intl.DateTimeFormat("ru-RU", {
   day: "2-digit",
@@ -100,6 +137,8 @@ export function CatalogPage() {
   const [productForm, setProductForm] = useState<ProductFormState>(emptyProductForm);
   const [statusForm, setStatusForm] = useState<StatusFormState>(emptyStatusForm);
   const [sourceForm, setSourceForm] = useState<SourceFormState>(emptySourceForm);
+  const [sourceTemplateForm, setSourceTemplateForm] =
+    useState<SourceTemplateFormState>(emptySourceTemplateForm);
   const [isSaving, setIsSaving] = useState(false);
   const [expandedMobileKey, setExpandedMobileKey] = useState<string | null>(null);
   const [mobileProductForm, setMobileProductForm] =
@@ -254,6 +293,7 @@ export function CatalogPage() {
       code: source.code,
       name: source.name,
     });
+    setSourceTemplateForm(readSourceTemplate(source.id));
     setModalMode("edit");
   };
 
@@ -279,6 +319,11 @@ export function CatalogPage() {
     setProductForm(emptyProductForm);
     setStatusForm(emptyStatusForm);
     setSourceForm(emptySourceForm);
+    setSourceTemplateForm(emptySourceTemplateForm);
+  };
+
+  const resetSourceTemplateForm = () => {
+    setSourceTemplateForm(emptySourceTemplateForm);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -414,6 +459,7 @@ export function CatalogPage() {
         code,
         name,
       });
+      persistSourceTemplate(createdSource.id, sourceTemplateForm);
       setSources((current) => [...current, createdSource].sort(sortSources));
       return;
     }
@@ -427,6 +473,7 @@ export function CatalogPage() {
       editingSource.id,
       { code, name },
     );
+    persistSourceTemplate(updatedSource.id, sourceTemplateForm);
     setSources((current) =>
       current
         .map((source) => (source.id === updatedSource.id ? updatedSource : source))
@@ -891,7 +938,7 @@ export function CatalogPage() {
       {modalMode ? (
         <div className="modal-overlay" role="presentation" onMouseDown={closeModal}>
           <form
-            className="user-modal catalog-modal"
+            className={`user-modal catalog-modal ${activeSection === "sources" ? "catalog-modal--source" : ""}`}
             onMouseDown={(event) => event.stopPropagation()}
             onSubmit={handleSubmit}
           >
@@ -915,11 +962,28 @@ export function CatalogPage() {
                 <StatusForm form={statusForm} onChange={setStatusForm} />
               ) : null}
               {activeSection === "sources" ? (
-                <SourceForm form={sourceForm} onChange={setSourceForm} />
+                <>
+                  <SourceForm form={sourceForm} onChange={setSourceForm} />
+                  <SourceTemplateForm
+                    form={sourceTemplateForm}
+                    onChange={setSourceTemplateForm}
+                  />
+                </>
               ) : null}
             </div>
 
-            <footer className="modal-actions">
+            <footer
+              className={`modal-actions ${activeSection === "sources" ? "modal-actions--triple" : ""}`}
+            >
+              {activeSection === "sources" ? (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={resetSourceTemplateForm}
+                >
+                  Сбросить шаблон
+                </button>
+              ) : null}
               <button className="secondary-button" type="button" onClick={closeModal}>
                 Отменить
               </button>
@@ -1237,6 +1301,100 @@ function SourceForm({
   );
 }
 
+function SourceTemplateForm({
+  form,
+  onChange,
+}: {
+  form: SourceTemplateFormState;
+  onChange: (form: SourceTemplateFormState) => void;
+}) {
+  return (
+    <section className="catalog-source-template-section">
+      <label className="catalog-source-template-full-width">
+        <span>Ссылка на JSON API</span>
+        <input
+          type="url"
+          value={form.endpointUrl}
+          placeholder={sourceTemplatePlaceholders.endpointUrl}
+          onChange={(event) => onChange({ ...form, endpointUrl: event.target.value })}
+        />
+      </label>
+      <div className="catalog-source-template-grid">
+        <label>
+          <span>Путь к массиву отзывов</span>
+          <input
+            type="text"
+            value={form.reviewsPath}
+            placeholder={sourceTemplatePlaceholders.reviewsPath}
+            onChange={(event) => onChange({ ...form, reviewsPath: event.target.value })}
+          />
+        </label>
+        <label>
+          <span>Внешний ID</span>
+          <input
+            type="text"
+            value={form.externalIdPath}
+            placeholder={sourceTemplatePlaceholders.externalIdPath}
+            onChange={(event) => onChange({ ...form, externalIdPath: event.target.value })}
+          />
+        </label>
+        <label>
+          <span>ID товара</span>
+          <input
+            type="text"
+            value={form.productIdPath}
+            placeholder={sourceTemplatePlaceholders.productIdPath}
+            onChange={(event) => onChange({ ...form, productIdPath: event.target.value })}
+          />
+        </label>
+        <label>
+          <span>SKU товара</span>
+          <input
+            type="text"
+            value={form.productSkuPath}
+            onChange={(event) => onChange({ ...form, productSkuPath: event.target.value })}
+          />
+        </label>
+        <label>
+          <span>Название товара</span>
+          <input
+            type="text"
+            value={form.productNamePath}
+            placeholder={sourceTemplatePlaceholders.productNamePath}
+            onChange={(event) => onChange({ ...form, productNamePath: event.target.value })}
+          />
+        </label>
+        <label>
+          <span>Текст отзыва</span>
+          <input
+            type="text"
+            value={form.reviewTextPath}
+            placeholder={sourceTemplatePlaceholders.reviewTextPath}
+            onChange={(event) => onChange({ ...form, reviewTextPath: event.target.value })}
+          />
+        </label>
+        <label>
+          <span>Оценка</span>
+          <input
+            type="text"
+            value={form.ratingPath}
+            placeholder={sourceTemplatePlaceholders.ratingPath}
+            onChange={(event) => onChange({ ...form, ratingPath: event.target.value })}
+          />
+        </label>
+        <label>
+          <span>Дата отзыва</span>
+          <input
+            type="text"
+            value={form.reviewDatePath}
+            onChange={(event) => onChange({ ...form, reviewDatePath: event.target.value })}
+          />
+        </label>
+      </div>
+    </section>
+  );
+}
+
 function sortProducts(first: CatalogProduct, second: CatalogProduct) {
   return first.id - second.id;
 }
@@ -1251,6 +1409,70 @@ function sortSources(first: ReviewSource, second: ReviewSource) {
 
 function buildCatalogKey(section: CatalogSection, id: number) {
   return `${section}:${id}`;
+}
+
+function buildSourceTemplateStorageKey(sourceId: number) {
+  return `${TEMPLATE_STORAGE_PREFIX}${sourceId}`;
+}
+
+function readSourceTemplate(sourceId: number): SourceTemplateFormState {
+  try {
+    const rawValue = localStorage.getItem(buildSourceTemplateStorageKey(sourceId));
+    if (!rawValue) {
+      return emptySourceTemplateForm;
+    }
+
+    const parsedValue = JSON.parse(rawValue) as Partial<
+      SourceTemplateFormState & { mode?: "api" | "file" }
+    >;
+
+    return {
+      endpointUrl: typeof parsedValue.endpointUrl === "string" ? parsedValue.endpointUrl : "",
+      reviewsPath: typeof parsedValue.reviewsPath === "string" ? parsedValue.reviewsPath : "",
+      externalIdPath:
+        typeof parsedValue.externalIdPath === "string" ? parsedValue.externalIdPath : "",
+      productIdPath:
+        typeof parsedValue.productIdPath === "string" ? parsedValue.productIdPath : "",
+      productSkuPath:
+        typeof parsedValue.productSkuPath === "string" ? parsedValue.productSkuPath : "",
+      productNamePath:
+        typeof parsedValue.productNamePath === "string" ? parsedValue.productNamePath : "",
+      reviewTextPath:
+        typeof parsedValue.reviewTextPath === "string" ? parsedValue.reviewTextPath : "",
+      ratingPath: typeof parsedValue.ratingPath === "string" ? parsedValue.ratingPath : "",
+      reviewDatePath:
+        typeof parsedValue.reviewDatePath === "string" ? parsedValue.reviewDatePath : "",
+    };
+  } catch {
+    return emptySourceTemplateForm;
+  }
+}
+
+function hasSourceTemplateValues(template: SourceTemplateFormState) {
+  return Object.values(template).some((value) => value.trim().length > 0);
+}
+
+function persistSourceTemplate(sourceId: number, template: SourceTemplateFormState) {
+  if (!hasSourceTemplateValues(template)) {
+    localStorage.removeItem(buildSourceTemplateStorageKey(sourceId));
+    return;
+  }
+
+  localStorage.setItem(
+    buildSourceTemplateStorageKey(sourceId),
+    JSON.stringify({
+      mode: "api",
+      endpointUrl: template.endpointUrl,
+      reviewsPath: template.reviewsPath,
+      externalIdPath: template.externalIdPath,
+      productIdPath: template.productIdPath,
+      productSkuPath: template.productSkuPath,
+      productNamePath: template.productNamePath,
+      reviewTextPath: template.reviewTextPath,
+      ratingPath: template.ratingPath,
+      reviewDatePath: template.reviewDatePath,
+    }),
+  );
 }
 
 function truncateText(value: string, maxLength: number) {

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AnalyticsPage } from "../pages/AnalyticsPage";
 import { CatalogPage } from "../pages/CatalogPage";
-import { IntegrationPage } from "../pages/IntegrationPage";
+import { UniversalIntegrationPage } from "../pages/IntegrationPage";
 import { LoginPage } from "../pages/LoginPage";
 import { ReviewsPage } from "../pages/ReviewsPage";
 import { UsersPage } from "../pages/UsersPage";
@@ -272,11 +272,14 @@ describe("Frontend smoke tests", () => {
         items: [],
       },
     ]);
+    mockApiClient.getCatalogReviewSources.mockResolvedValue([
+      { id: 1, code: "manual", name: "Ручной ввод" },
+    ]);
 
-    renderWithRoute(<IntegrationPage />, "/integration");
+    renderWithRoute(<UniversalIntegrationPage />, "/integration");
 
-    expect(await screen.findByText("Perekrestok Reviews")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Предпросмотр" })).toBeInTheDocument();
+    expect(await screen.findByText("Импорт отзывов")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Проверить источник" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Импортировать отзывы" })).toBeInTheDocument();
   });
 });

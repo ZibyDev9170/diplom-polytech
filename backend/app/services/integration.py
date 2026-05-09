@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -15,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.catalog import Product, ReviewSource, ReviewStatus
 from app.models.integration import ImportBatch, ImportItem
 from app.models.reviews import Review, ReviewStatusHistory
-from app.schemas.integration import ExternalReviewItem
+from app.schemas.integration import ExternalReviewItem, RemoteReviewFieldMapping
 from app.schemas.auth import UserRead
 from app.services.audit import AuditEntity, AuditEvent, add_audit_log
 
@@ -60,6 +62,16 @@ class ReviewImportResult:
     batch: ImportBatch
     source: ReviewSource
     items: list[ImportItem]
+
+
+@dataclass
+class RemoteReviewPreviewResult:
+    source_code: str
+    source_name: str | None
+    endpoint_url: str
+    total_count: int
+    valid_reviews: list[ExternalReviewItem]
+    errors: list[str]
 
 
 async def import_external_reviews(
@@ -168,7 +180,7 @@ async def import_external_reviews(
             items.append(import_item)
             continue
 
-        product = await find_product_for_external_review(session, external_review)
+        product = await find_or_create_product_for_external_review(session, external_review)
         if product is None:
             batch.failed_count += 1
             item_external_id = get_unique_import_item_external_id(
@@ -324,6 +336,252 @@ async def build_perekrestok_review_payload_preview(
     }
 
 
+async def build_remote_review_payload_preview(
+    *,
+    endpoint_url: str,
+    source_code: str,
+    source_name: str | None,
+    offset: int,
+    limit: int,
+    reviews_path: str | None,
+    mapping: RemoteReviewFieldMapping,
+) -> RemoteReviewPreviewResult:
+    payload = await fetch_json_payload_from_url(endpoint_url, offset=offset, limit=limit)
+    raw_reviews = extract_reviews_from_remote_payload(payload, reviews_path, offset=offset, limit=limit)
+    valid_reviews: list[ExternalReviewItem] = []
+    errors: list[str] = []
+
+    for index, raw_item in enumerate(raw_reviews, start=1):
+        try:
+            mapped_item = map_remote_item_to_external_review(raw_item, mapping)
+            valid_reviews.append(ExternalReviewItem.model_validate(mapped_item))
+        except (RuntimeError, ValueError, ValidationError) as exc:
+            errors.append(f"Запись {index}: {format_remote_mapping_error(exc)}")
+
+    return RemoteReviewPreviewResult(
+        source_code=source_code.strip().lower(),
+        source_name=normalize_external_text(source_name),
+        endpoint_url=endpoint_url,
+        total_count=len(raw_reviews),
+        valid_reviews=valid_reviews,
+        errors=errors,
+    )
+
+
+async def build_remote_review_payload(
+    *,
+    endpoint_url: str,
+    source_code: str,
+    source_name: str | None,
+    offset: int,
+    limit: int,
+    reviews_path: str | None,
+    mapping: RemoteReviewFieldMapping,
+) -> dict[str, Any]:
+    preview = await build_remote_review_payload_preview(
+        endpoint_url=endpoint_url,
+        source_code=source_code,
+        source_name=source_name,
+        offset=offset,
+        limit=limit,
+        reviews_path=reviews_path,
+        mapping=mapping,
+    )
+
+    if preview.errors:
+        raise RuntimeError(
+            "Remote source payload contains invalid reviews: " + "; ".join(preview.errors[:10]),
+        )
+
+    return {
+        "source_code": preview.source_code,
+        "source_name": preview.source_name,
+        "reviews": [review.model_dump(mode="json") for review in preview.valid_reviews],
+    }
+
+
+async def fetch_json_payload_from_url(endpoint_url: str, *, offset: int, limit: int) -> Any:
+    return await asyncio.to_thread(fetch_json_payload_from_url_sync, endpoint_url, offset, limit)
+
+
+def fetch_json_payload_from_url_sync(endpoint_url: str, offset: int, limit: int) -> Any:
+    resolved_endpoint_url = format_remote_endpoint_url(
+        endpoint_url,
+        offset=offset,
+        limit=limit,
+    )
+    request = urllib.request.Request(
+        resolved_endpoint_url,
+        headers={"Accept": "application/json", "User-Agent": "review-management-system"},
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=HUGGING_FACE_TIMEOUT_SECONDS,
+        ) as response:
+            response_body = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        error_payload = ""
+
+        try:
+            error_payload = exc.read().decode("utf-8").strip()
+        except OSError:
+            error_payload = ""
+
+        error_suffix = f": {error_payload}" if error_payload else ""
+        raise RuntimeError(
+            f"Could not fetch reviews from the remote source ({resolved_endpoint_url}): "
+            f"HTTP {exc.code}{error_suffix}"
+        ) from exc
+    except OSError as exc:
+        raise RuntimeError(
+            f"Could not fetch reviews from the remote source ({resolved_endpoint_url}): {exc}"
+        ) from exc
+
+    try:
+        return json.loads(response_body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Remote source returned invalid JSON") from exc
+
+
+def format_remote_endpoint_url(endpoint_url: str, *, offset: int, limit: int) -> str:
+    normalized_endpoint_url = (
+        endpoint_url.replace("%7B", "{")
+        .replace("%7D", "}")
+        .replace("%7b", "{")
+        .replace("%7d", "}")
+    )
+
+    resolved_endpoint_url = (
+        normalized_endpoint_url.replace("{offset}", str(offset))
+        .replace("{limit}", str(limit))
+        .replace("{length}", str(limit))
+    )
+
+    parsed_url = urllib.parse.urlsplit(resolved_endpoint_url)
+    query_params = urllib.parse.parse_qsl(parsed_url.query, keep_blank_values=True)
+    normalized_query_params: list[tuple[str, str]] = []
+    has_length = any(key == "length" for key, _ in query_params)
+
+    for key, value in query_params:
+        normalized_value = value
+
+        if key in {"offset", "limit", "length"}:
+            normalized_value = re.sub(r"^\{(\d+)\}$", r"\1", normalized_value)
+
+        if (
+            parsed_url.netloc == "datasets-server.huggingface.co"
+            and parsed_url.path == "/rows"
+            and key == "limit"
+            and not has_length
+        ):
+            normalized_query_params.append(("length", normalized_value))
+            continue
+
+        normalized_query_params.append((key, normalized_value))
+
+    if normalized_query_params != query_params:
+        return urllib.parse.urlunsplit(
+            (
+                parsed_url.scheme,
+                parsed_url.netloc,
+                parsed_url.path,
+                urllib.parse.urlencode(normalized_query_params),
+                parsed_url.fragment,
+            )
+        )
+
+    return resolved_endpoint_url
+
+
+def extract_reviews_from_remote_payload(
+    payload: Any,
+    reviews_path: str | None,
+    *,
+    offset: int,
+    limit: int,
+) -> list[Any]:
+    extracted_value = resolve_json_path(payload, reviews_path)
+
+    if not isinstance(extracted_value, list):
+        raise RuntimeError("Reviews path does not point to an array")
+
+    return extracted_value[offset : offset + limit]
+
+
+def resolve_json_path(payload: Any, path: str | None) -> Any:
+    if path is None:
+        return payload
+
+    normalized_path = path.strip()
+    if not normalized_path or normalized_path == "$":
+        return payload
+
+    if normalized_path.startswith("$."):
+        normalized_path = normalized_path[2:]
+
+    current: Any = payload
+    for segment in normalized_path.split("."):
+        current = resolve_json_path_segment(current, segment)
+
+    return current
+
+
+def resolve_json_path_segment(value: Any, segment: str) -> Any:
+    normalized_segment = segment.strip()
+    if not normalized_segment:
+        return value
+
+    if isinstance(value, dict):
+        if normalized_segment not in value:
+            raise RuntimeError(f"Path segment was not found: {normalized_segment}")
+        return value[normalized_segment]
+
+    if isinstance(value, list) and normalized_segment.isdigit():
+        index = int(normalized_segment)
+        if index < 0 or index >= len(value):
+            raise RuntimeError(f"Array index is out of range: {normalized_segment}")
+        return value[index]
+
+    raise RuntimeError(f"Could not resolve path segment: {normalized_segment}")
+
+
+def map_remote_item_to_external_review(
+    raw_item: Any,
+    mapping: RemoteReviewFieldMapping,
+) -> dict[str, Any]:
+    if not isinstance(raw_item, dict):
+        raise ValueError("review item must be an object")
+
+    mapped_item: dict[str, Any] = {
+        "external_id": get_required_mapped_value(raw_item, mapping.external_id),
+        "review_text": get_required_mapped_value(raw_item, mapping.review_text),
+        "rating": get_mapped_rating(raw_item, mapping.rating),
+        "review_date": get_mapped_review_date(raw_item, mapping.review_date),
+        "source_payload": raw_item,
+    }
+
+    if mapping.product_id:
+        product_id = get_optional_mapped_value(raw_item, mapping.product_id)
+        if product_id is not None:
+            mapped_item["product_id"] = product_id
+
+    if mapping.product_sku:
+        product_sku = get_optional_mapped_value(raw_item, mapping.product_sku)
+        if product_sku is not None:
+            mapped_item["product_sku"] = product_sku
+    elif mapped_item.get("product_id") is not None:
+        mapped_item["product_sku"] = str(mapped_item["product_id"])
+
+    if mapping.product_name:
+        product_name = get_optional_mapped_value(raw_item, mapping.product_name)
+        if product_name is not None:
+            mapped_item["product_name"] = product_name
+
+    return mapped_item
+
+
 async def fetch_perekrestok_rows(*, offset: int, limit: int) -> list[dict[str, Any]]:
     return await asyncio.to_thread(fetch_perekrestok_rows_sync, offset, limit)
 
@@ -393,17 +651,11 @@ def map_perekrestok_row_to_external_review(row: dict[str, Any]) -> dict[str, Any
 
 
 async def get_or_create_perekrestok_source(session: AsyncSession) -> ReviewSource:
-    source = await get_source_by_code_or_none(session, PEREKRESTOK_SOURCE_CODE)
-
-    if source is not None:
-        return source
-
-    source = ReviewSource(code=PEREKRESTOK_SOURCE_CODE, name=PEREKRESTOK_SOURCE_NAME)
-    session.add(source)
-    await session.flush()
-    await session.refresh(source)
-
-    return source
+    return await get_or_create_review_source(
+        session,
+        PEREKRESTOK_SOURCE_CODE,
+        PEREKRESTOK_SOURCE_NAME,
+    )
 
 
 async def get_or_create_perekrestok_products(
@@ -513,6 +765,29 @@ async def get_source_by_code_or_none(
     )
 
 
+async def get_or_create_review_source(
+    session: AsyncSession,
+    source_code: str,
+    source_name: str | None = None,
+) -> ReviewSource:
+    normalized_code = source_code.strip().lower()
+    source = await get_source_by_code_or_none(session, normalized_code)
+
+    if source is not None:
+        return source
+
+    normalized_name = normalize_external_text(source_name)
+    source = ReviewSource(
+        code=normalized_code,
+        name=(normalized_name or build_default_source_name(normalized_code))[:100],
+    )
+    session.add(source)
+    await session.flush()
+    await session.refresh(source)
+
+    return source
+
+
 async def get_required_status_by_code(session: AsyncSession, code: str) -> ReviewStatus:
     status = await session.scalar(
         select(ReviewStatus).where(ReviewStatus.code == code),
@@ -538,7 +813,7 @@ async def get_existing_review_id(
     )
 
 
-async def find_product_for_external_review(
+async def find_or_create_product_for_external_review(
     session: AsyncSession,
     external_review: ExternalReviewItem,
 ) -> Product | None:
@@ -553,12 +828,27 @@ async def find_product_for_external_review(
             return product
 
     if external_review.product_sku is not None:
-        return await session.scalar(
+        normalized_sku = external_review.product_sku.strip().lower()
+        product_by_sku = await session.scalar(
             select(Product).where(
-                func.lower(Product.sku) == external_review.product_sku.strip().lower(),
-                Product.is_active.is_(True),
+                func.lower(Product.sku) == normalized_sku,
             ),
         )
+
+        if product_by_sku is not None:
+            return product_by_sku if product_by_sku.is_active else None
+
+        product_name = normalize_external_text(external_review.product_name)
+        if product_name:
+            product = Product(
+                sku=external_review.product_sku.strip()[:100],
+                name=product_name[:255],
+                is_active=True,
+            )
+            session.add(product)
+            await session.flush()
+            await session.refresh(product)
+            return product
 
     return None
 
@@ -597,6 +887,91 @@ def normalize_external_text(value: Any) -> str | None:
     return normalized_value or None
 
 
+def get_required_mapped_value(raw_item: dict[str, Any], path: str) -> str:
+    value = get_optional_mapped_value(raw_item, path)
+    if value is None:
+        raise ValueError(f"required field was not found by path: {path}")
+
+    return value
+
+
+def get_optional_mapped_value(raw_item: dict[str, Any], path: str | None) -> str | None:
+    if path is None:
+        return None
+
+    if path.startswith("="):
+        return normalize_external_text(resolve_mapping_constant(path))
+
+    try:
+        value = resolve_json_path(raw_item, path)
+    except RuntimeError:
+        return None
+
+    return normalize_external_text(value)
+
+
+def get_mapped_rating(raw_item: dict[str, Any], path: str) -> Any:
+    if path.startswith("="):
+        value = resolve_mapping_constant(path)
+    else:
+        value = resolve_json_path(raw_item, path)
+    rating = normalize_rating(value)
+    return rating if 1 <= rating <= 5 else value
+
+
+def get_mapped_review_date(raw_item: dict[str, Any], path: str) -> Any:
+    if path.startswith("="):
+        value = resolve_mapping_constant(path)
+    else:
+        value = resolve_json_path(raw_item, path)
+    normalized_value = normalize_external_review_date(value)
+    return normalized_value if normalized_value is not None else value
+
+
+def resolve_mapping_constant(path: str) -> Any:
+    constant_value = path[1:].strip()
+
+    if not constant_value:
+        return None
+
+    if constant_value.lower() == "today":
+        return date.today().isoformat()
+
+    return constant_value
+
+
+def normalize_external_review_date(value: Any) -> str | None:
+    if value is None:
+        return None
+
+    if isinstance(value, date):
+        return value.isoformat()
+
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.fromtimestamp(float(value), tz=timezone.utc).date().isoformat()
+        except (OverflowError, OSError, ValueError):
+            return None
+
+    if isinstance(value, str):
+        normalized_value = value.strip()
+        if not normalized_value:
+            return None
+
+        if "T" in normalized_value:
+            normalized_value = normalized_value.split("T", 1)[0]
+
+        try:
+            return date.fromisoformat(normalized_value).isoformat()
+        except ValueError:
+            return None
+
+    return None
+
+
 def normalize_rating(value: Any) -> int:
     try:
         rating = round(float(value))
@@ -604,6 +979,21 @@ def normalize_rating(value: Any) -> int:
         return 0
 
     return rating
+
+
+def format_remote_mapping_error(exc: ValidationError | ValueError) -> str:
+    if isinstance(exc, ValidationError):
+        return build_validation_error_message(exc)
+
+    return str(exc)
+
+
+def build_default_source_name(source_code: str) -> str:
+    words = source_code.replace("-", " ").replace("_", " ").split()
+    if not words:
+        return source_code
+
+    return " ".join(word.capitalize() for word in words)
 
 
 def build_perekrestok_product_sku(product_id: str) -> str:

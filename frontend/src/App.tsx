@@ -6,7 +6,7 @@ import { AppLayout } from "./layouts/AppLayout";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { CatalogPage } from "./pages/CatalogPage";
 import { ForbiddenPage } from "./pages/ForbiddenPage";
-import { IntegrationPage } from "./pages/IntegrationPage";
+import { UniversalIntegrationPage } from "./pages/IntegrationPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { ReviewDetailPage, ReviewsPage } from "./pages/ReviewsPage";
@@ -29,7 +29,8 @@ export function App() {
             <Route path="catalog" element={<CatalogPage />} />
           </Route>
           <Route element={<ProtectedRoute roles={["admin", "manager"]} />}>
-            <Route path="integration" element={<IntegrationPage />} />
+            <Route path="integration" element={<UniversalIntegrationPage />} />
+            <Route path="integration/custom" element={<Navigate replace to="/integration" />} />
           </Route>
           <Route element={<ProtectedRoute roles={["admin", "analyst"]} />}>
             <Route path="analytics" element={<AnalyticsPage />} />
